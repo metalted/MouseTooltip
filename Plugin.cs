@@ -15,7 +15,7 @@ namespace MouseTooltip
     {
         public const string pluginGuid = "com.metalted.zeepkist.mousetooltip";
         public const string pluginName = "Mouse Tooltip";
-        public const string pluginVersion = "1.0";
+        public const string pluginVersion = "1.1.1";
         public static ConfigFile cfg;
 
         public string[] langOptions = new string[0];
