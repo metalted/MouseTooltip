@@ -16,6 +16,9 @@ namespace MouseTooltip
         public const string pluginGuid = "com.metalted.zeepkist.mousetooltip";
         public const string pluginName = "Mouse Tooltip";
         public const string pluginVersion = "1.0";
+        public static ConfigFile cfg;
+
+        public string[] langOptions = new string[0];
 
         public ConfigEntry<string> tooltipLanguage;
 
@@ -25,9 +28,22 @@ namespace MouseTooltip
             harmony.PatchAll();
             Logger.LogInfo($"Plugin {pluginName} is loaded!");
 
-            tooltipLanguage = Config.Bind("General", "Language", "default", "Language for the tooltip. If not available will show the -default- set.");
+            //Try to read the MouseTooltipLang.json file.
+            TooltipHandler.Init();
 
-            TooltipHandler.Init((string) tooltipLanguage.BoxedValue);
+            //If the load was succesful.
+            if(TooltipHandler.enabled)
+            {
+                //Get the keys from the dictionary.
+                langOptions = TooltipHandler.data.Keys.ToArray();
+                tooltipLanguage = Config.Bind("General", "Language", "en", new ConfigDescription("Language for the tooltip.", new AcceptableValueList<string>(langOptions)));
+            }
+            else
+            {
+                tooltipLanguage = Config.Bind("General", "Language", "default", "Language for the tooltip");
+            }
+
+            cfg = Config;
         }
 
         public void OnGUI()
@@ -65,7 +81,7 @@ namespace MouseTooltip
                 }
             }
         }
-    }
+    }   
 
     public static class TooltipHandler
     {
@@ -73,49 +89,49 @@ namespace MouseTooltip
         public static bool visible = false;
         public static bool enabled = false;
         public static Dictionary<string, Dictionary<string, string>> data;
-        public static Dictionary<string, string> lang;
 
-        public static void Init(string language)
+        public static void Init()
         {
+            //Get the plugins folder location.
             string pluginsFolder = AppDomain.CurrentDomain.BaseDirectory + @"\BepInEx\plugins";
+
+            //Language file name.
             string languageFileName = "MouseTooltipLang.json";
+
+            //Look for the translation file in the plugins folder.
             string[] files = Directory.GetFiles(pluginsFolder, languageFileName, SearchOption.AllDirectories);
 
-            if (files.Length > 0)
+            //If the file isnt found
+            if (files.Length == 0)
             {
-                string jsonData = File.ReadAllText(files[0]);
-                data = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, string>>>(jsonData);
-
-                if (data.ContainsKey(language))
-                {
-                    lang = data[language];
-                    enabled = true;
-                    Debug.Log("Mouse Tooltip Language Loaded: " + language + ".");
-                }
-                else if (data.ContainsKey("default"))
-                {
-                    lang = data["default"];
-                    enabled = true;
-
-                    Debug.Log("Mouse Tooltip Language Loaded: default.");
-                }
+                Debug.LogError("Tooltips not loaded because MouseTooltipLang.json wasn't found in the plugins folder!");
+                enabled = false;
+                return;
             }
-            else
-            {
-                Debug.LogError("Tooltips not loaded because MouseTooltipLang.json wasn't found!");
-            }
+
+            string jsonData = File.ReadAllText(files[0]);
+            data = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, string>>>(jsonData);
+
+            Debug.Log("MouseTooltipLang.json loaded.");
+            enabled = true;
         }
 
         public static string GetTranslation(string inputString)
         {
-            if (lang.ContainsKey(inputString))
+            if(data != null)
             {
-                return lang[inputString];
+                string lang = (string)BaseZeepKistPlugin.cfg["General", "Language"].BoxedValue;
+                if (data.ContainsKey(lang))
+                {
+                    //Selected option exists
+                    if(data[lang].ContainsKey(inputString))
+                    {
+                        return data[lang][inputString];
+                    }
+                }
             }
-            else
-            {
-                return "";
-            }
+
+            return "";
         }
 
         public static void OnButtonEnter(LEV_CustomButton button)
@@ -142,6 +158,13 @@ namespace MouseTooltip
 
             visible = false;
         }
+
+        public static void BlockGUIDestroyed()
+        {
+            if (!enabled) { return; }
+
+            visible = false;
+        }
     }
 
     [HarmonyPatch(typeof(LEV_CustomButton), "OnPointerEnter")]
@@ -159,6 +182,15 @@ namespace MouseTooltip
         public static void Postfix(LEV_CustomButton __instance)
         {
             TooltipHandler.OnButtonExit();
+        }
+    }
+
+    [HarmonyPatch(typeof(LEV_Inspector), "DestroyBlockGUI")]
+    public class GUIDestroyed
+    {
+        public static void Postfix()
+        {
+            TooltipHandler.BlockGUIDestroyed();
         }
     }
 }
